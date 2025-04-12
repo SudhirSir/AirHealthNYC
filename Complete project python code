@@ -22,7 +22,7 @@ data_values = df['Data Value'].values
 mean_val = np.mean(data_values)
 std_val = np.std(data_values)
 
-# Keep only values within 3 standard deviations
+# Keep only values within 3 standard deviations 
 df = df[(data_values >= mean_val - 3 * std_val) & (data_values <= mean_val + 3 * std_val)]
 
  
