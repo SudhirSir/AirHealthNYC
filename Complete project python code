@@ -11,6 +11,8 @@ df = pd.read_csv("C:/Users/Sushil/OneDrive/Documents/Desktop/IVth Sem Material/A
 df.head(), df.columns  # to check dataa shakal
  
 # Handle missing values 
+
+
 mean_pm25 = np.nanmean(df['Data Value'])
 df['Data Value'] = df['Data Value'].fillna(mean_pm25)
 
