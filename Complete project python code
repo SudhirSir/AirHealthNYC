@@ -72,6 +72,8 @@ plt.ylabel('Frequency')
 plt.show()
 print("PM 2.5 Stats:\n", pm25_annual['Data Value'].describe())
 
+
+
 # 2. PM 2.5 Across Neighborhoods (Boxplot)
 plt.figure(figsize=(12, 6))
 sns.boxplot(x='Geo Place Name', y='Data Value', data=pm25_annual)
