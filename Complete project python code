@@ -1,0 +1,192 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+import numpy as np
+ 
+
+# dataset upload krne ke liye
+df = pd.read_csv("C:/Users/Sushil/OneDrive/Documents/Desktop/IVth Sem Material/Air_Quality.csv")
+df.head(), df.columns  # to check dataa shakal
+ 
+# Handle missing values 
+mean_pm25 = np.nanmean(df['Data Value'])
+df['Data Value'] = df['Data Value'].fillna(mean_pm25)
+
+# Confirm missing values are handled
+print("Remaining Missing Values:\n", df.isnull().sum())
+
+# Remove outliers from 'Data Value' column using 3-sigma rule
+data_values = df['Data Value'].values
+mean_val = np.mean(data_values)
+std_val = np.std(data_values)
+
+# Keep only values within 3 standard deviations
+df = df[(data_values >= mean_val - 3 * std_val) & (data_values <= mean_val + 3 * std_val)]
+
+ 
+
+# Confirm shape after cleaning
+print(f'Data shape after cleaning: {df.shape}')
+print(df.describe())
+
+# Filter Data for UHF42
+df_uhf42 = df[df['Geo Type Name'] == 'UHF42']
+pm25_data = df_uhf42[df_uhf42['Indicator ID'] == 365]  # PM 2.5
+pm25_annual = pm25_data[pm25_data['Time Period'].str.contains('Annual Average')]
+pm25_annual['Year'] = pm25_annual['Time Period'].str.split().str[-1].astype(int)
+asthma_ed = df_uhf42[df_uhf42['Indicator ID'] == 648]  # Asthma ED visits
+
+# Function to parse multi-year periods
+def parse_years(time_period):
+    start, end = map(int, time_period.split('-'))
+    return list(range(start, end + 1))
+
+# Aggregate PM 2.5 for asthma periods
+health_data = []
+for _, row in asthma_ed.iterrows():
+    geo_id = row['Geo Join ID']
+    time_period = row['Time Period']
+    years = parse_years(time_period)
+    pm25_values = pm25_annual[(pm25_annual['Geo Join ID'] == geo_id) & 
+                              (pm25_annual['Year'].isin(years))]['Data Value']
+    if not pm25_values.empty:
+        health_data.append({
+            'Geo Join ID': geo_id,
+            'Geo Place Name': row['Geo Place Name'],
+            'Time Period': time_period,
+            'Average PM2.5': pm25_values.mean(),
+            'Asthma ED Visits': row['Data Value']
+        })
+health_df = pd.DataFrame(health_data)
+
+ # --- Statistical Analyses with Charts ---
+
+# 1. PM 2.5 Distribution (Histogram)
+plt.figure(figsize=(10, 6))
+sns.histplot(pm25_annual['Data Value'], kde=True, color='blue')
+plt.title('Distribution of Annual Average PM 2.5 (UHF42)')
+plt.xlabel('PM 2.5 (mcg/m3)')
+plt.ylabel('Frequency')
+plt.show()
+print("PM 2.5 Stats:\n", pm25_annual['Data Value'].describe())
+
+# 2. PM 2.5 Across Neighborhoods (Boxplot)
+plt.figure(figsize=(12, 6))
+sns.boxplot(x='Geo Place Name', y='Data Value', data=pm25_annual)
+plt.xticks(rotation=90)
+plt.title('PM 2.5 Levels Across UHF42 Neighborhoods')
+plt.xlabel('Neighborhood')
+plt.ylabel('PM 2.5 (mcg/m3)')
+plt.show()
+top_pm25 = pm25_annual.groupby('Geo Place Name')['Data Value'].mean().nlargest(5)
+print("Top 5 Neighborhoods by Mean PM 2.5:\n", top_pm25)
+
+# 3. PM 2.5 Trend Over Time (Line Plot)
+pm25_yearly = pm25_annual.groupby('Year')['Data Value'].mean().reset_index()
+plt.figure(figsize=(10, 6))
+sns.lineplot(x='Year', y='Data Value', data=pm25_yearly, marker='o')
+plt.title('Average PM 2.5 Trend Over Time (UHF42)')
+plt.xlabel('Year')
+plt.ylabel('Mean PM 2.5 (mcg/m3)')
+plt.show()
+print("PM 2.5 Yearly Mean:\n", pm25_yearly)
+
+# 4. Asthma ED Visits Distribution (Histogram)
+plt.figure(figsize=(10, 6))
+sns.histplot(health_df['Asthma ED Visits'], kde=True, color='green')
+plt.title('Distribution of Asthma ED Visits (UHF42)')
+plt.xlabel('Asthma ED Visits (per 100,000 children)')
+plt.ylabel('Frequency')
+plt.show()
+print("Asthma ED Stats:\n", health_df['Asthma ED Visits'].describe())
+
+# 5. Correlation Between PM 2.5 and Asthma ED Visits (Scatter with Regression Line)
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='Average PM2.5', y='Asthma ED Visits', data=health_df)
+sns.regplot(x='Average PM2.5', y='Asthma ED Visits', data=health_df, scatter=False, color='red')
+plt.title('PM 2.5 vs. Asthma ED Visits with Correlation')
+plt.xlabel('Average PM 2.5 (mcg/m3)')
+plt.ylabel('Asthma ED Visits (per 100,000)')
+plt.show()
+correlation = health_df['Average PM2.5'].corr(health_df['Asthma ED Visits'])
+print(f'Correlation Coefficient: {correlation:.3f}')
+
+# 6. Linear Regression Model (Residual Plot)
+X = health_df[['Average PM2.5']]
+y = health_df['Asthma ED Visits']
+model = LinearRegression()
+model.fit(X, y)
+y_pred = model.predict(X)
+residuals = y - y_pred
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x=y_pred, y=residuals)
+plt.axhline(0, color='red', linestyle='--')
+plt.title('Residual Plot for Linear Regression')
+plt.xlabel('Predicted Asthma ED Visits')
+plt.ylabel('Residuals')
+plt.show()
+print(f'R-squared: {r2_score(y, y_pred):.3f}')
+print(f'MSE: {mean_squared_error(y, y_pred):.3f}')
+
+# 7. PM 2.5 Seasonality (Bar Plot)
+pm25_seasonal = df_uhf42[df_uhf42['Indicator ID'] == 365]
+pm25_seasonal['Season'] = pm25_seasonal['Time Period'].apply(
+    lambda x: 'Summer' if 'Summer' in x else 'Winter' if 'Winter' in x else 'Annual')
+seasonal_means = pm25_seasonal.groupby('Season')['Data Value'].mean().reset_index()
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Season', y='Data Value', data=seasonal_means)
+plt.title('Average PM 2.5 by Season (UHF42)')
+plt.xlabel('Season')
+plt.ylabel('Mean PM 2.5 (mcg/m3)')
+plt.show()
+print("Seasonal PM 2.5 Means:\n", seasonal_means)
+
+# 8. Outlier Analysis (Boxplot for PM 2.5 and Asthma)
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)
+sns.boxplot(y=pm25_annual['Data Value'], color='blue')
+plt.title('Outliers in PM 2.5')
+plt.ylabel('PM 2.5 (mcg/m3)')
+plt.subplot(1, 2, 2)
+sns.boxplot(y=health_df['Asthma ED Visits'], color='green')
+plt.title('Outliers in Asthma ED Visits')
+plt.ylabel('Asthma ED Visits (per 100,000)')
+plt.tight_layout()
+plt.show()
+pm25_outliers = pm25_annual[pm25_annual['Data Value'] > pm25_annual['Data Value'].quantile(0.95)]
+print("Top PM 2.5 Outliers:\n", pm25_outliers[['Geo Place Name', 'Data Value']].head())
+
+
+
+# 9. Correlation Heatmap
+correlation_cols = health_df[['Average PM2.5', 'Asthma ED Visits']]
+corr_matrix = correlation_cols.corr()
+plt.figure(figsize=(8, 6))
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5)
+plt.title('Correlation Heatmap: PM2.5 vs. Asthma ED Visits')
+plt.show()
+
+
+# 10. Pie Chart: Top 5 Neighborhoods by Asthma ED Visits
+top5 = health_df.groupby('Geo Place Name')['Asthma ED Visits'].sum().nlargest(5)
+plt.figure(figsize=(8, 8))
+plt.pie(top5, labels=top5.index, autopct='%1.1f%%', startangle=140, 
+        colors=sns.color_palette('pastel'), textprops={'fontsize': 12})
+plt.title('Top 5 Areas by Asthma ED Visits', fontsize=16, fontweight='bold')
+plt.axis('equal')
+plt.show()
+
+
+# Additional Creativity: Pairplot for Multiple Variables
+sns.pairplot(health_df[['Average PM2.5', 'Asthma ED Visits']])
+plt.show()
+
+
+
+ 
+
+
+
+
