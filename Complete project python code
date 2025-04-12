@@ -13,6 +13,8 @@ df.head(), df.columns  # to check dataa shakal
 # Handle missing values 
 
 
+
+
 mean_pm25 = np.nanmean(df['Data Value'])
 df['Data Value'] = df['Data Value'].fillna(mean_pm25)
 
